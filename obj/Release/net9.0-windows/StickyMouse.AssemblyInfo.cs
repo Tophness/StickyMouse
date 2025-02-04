@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("StickyMouse")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+61ba55e67c204e2b71f5f248a3c964f93330e339")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ae76293c6f727a422d2b4ed41666a5b424679c49")]
 [assembly: System.Reflection.AssemblyProductAttribute("StickyMouse")]
 [assembly: System.Reflection.AssemblyTitleAttribute("StickyMouse")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
