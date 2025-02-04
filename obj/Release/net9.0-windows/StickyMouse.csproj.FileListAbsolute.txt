@@ -1,0 +1,15 @@
+E:\Downloads\StickyMouse\bin\Release\net9.0-windows\StickyMouse.exe
+E:\Downloads\StickyMouse\bin\Release\net9.0-windows\StickyMouse.deps.json
+E:\Downloads\StickyMouse\bin\Release\net9.0-windows\StickyMouse.runtimeconfig.json
+E:\Downloads\StickyMouse\bin\Release\net9.0-windows\StickyMouse.dll
+E:\Downloads\StickyMouse\bin\Release\net9.0-windows\StickyMouse.pdb
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.GeneratedMSBuildEditorConfig.editorconfig
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.AssemblyInfoInputs.cache
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.AssemblyInfo.cs
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.csproj.CoreCompileInputs.cache
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.dll
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\refint\StickyMouse.dll
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.pdb
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.genruntimeconfig.cache
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\ref\StickyMouse.dll
+E:\Downloads\StickyMouse\obj\Release\net9.0-windows\StickyMouse.sourcelink.json
