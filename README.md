@@ -24,8 +24,7 @@ https://github.com/user-attachments/assets/424daf24-fad7-4d06-9e7d-d94ecf851964
 
 https://github.com/user-attachments/assets/dd9a65dd-5a03-44aa-af9d-dea484edda0b
 
-https://github.com/user-attachments/assets/c7c5dc19-3046-4fa5-a6ba-afa8d47506d2
-
+https://github.com/user-attachments/assets/784e2be3-4f67-4c27-a612-2e0cdd7676ad
 
 ## Installation
 Download the latest release from the [Releases](https://github.com/Tophness/StickyMouse/releases) page and run `StickyMouse.exe`.
