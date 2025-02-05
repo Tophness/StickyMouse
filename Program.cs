@@ -41,6 +41,7 @@ static class Program {
   public static bool UseArcEditKeyboardBind = true;
   public static bool UseArcScrollUpKeyboardBind = true;
   public static bool UseArcScrollDownKeyboardBind = true;
+  public static bool ToggleMode = false;
 
   static bool axisLocked;
   static double lockedDirX, lockedDirY;
@@ -57,6 +58,8 @@ static class Program {
   static double arcRadius, startAngle, sweepAngle;
   static ArcOverlay arcOverlay;
   static LinearOverlay linearOverlay;
+  static bool linearKeyDown = false;
+  static bool arcEditKeyDown = false;
   static string iniPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.ini");
 
   [STAThread]
@@ -95,6 +98,7 @@ static class Program {
     UseArcEditKeyboardBind = bool.Parse(ReadIni("Settings", "UseArcEditKeyboardBind", "true"));
     UseArcScrollUpKeyboardBind = bool.Parse(ReadIni("Settings", "UseArcScrollUpKeyboardBind", "true"));
     UseArcScrollDownKeyboardBind = bool.Parse(ReadIni("Settings", "UseArcScrollDownKeyboardBind", "true"));
+    ToggleMode = bool.Parse(ReadIni("Settings", "ToggleMode", "False"));
   }
 
   static void SaveSettings() {
@@ -111,6 +115,7 @@ static class Program {
     WriteIni("Settings", "UseArcEditKeyboardBind", UseArcEditKeyboardBind.ToString());
     WriteIni("Settings", "UseArcScrollUpKeyboardBind", UseArcScrollUpKeyboardBind.ToString());
     WriteIni("Settings", "UseArcScrollDownKeyboardBind", UseArcScrollDownKeyboardBind.ToString());
+    WriteIni("Settings", "ToggleMode", ToggleMode.ToString());
   }
 
   static string ReadIni(string section, string key, string defaultValue) {
@@ -236,15 +241,31 @@ static class Program {
       }
       if (!UseKeyboardBind) {
         if (wParam == (IntPtr) MouseBindDown) {
-          active = true;
-          computed = false;
-          initial = hs.pt;
+          if (ToggleMode) {
+            if (!linearKeyDown) {
+              active = !active;
+              if (active) {
+                initial = hs.pt;
+                computed = false;
+                axisLocked = false;
+              } else {
+                axisLocked = false;
+                linearOverlay?.Hide();
+              }
+            }
+            linearKeyDown = true;
+          } else {
+            active = true;
+            computed = false;
+            initial = hs.pt;
+          }
         } else if (wParam == (IntPtr) MouseBindUp) {
-          active = false;
-          computed = false;
-          axisLocked = false;
-          if (linearOverlay != null)
-            linearOverlay.Hide();
+          linearKeyDown = false;
+          if (!ToggleMode) {
+            active = false;
+            axisLocked = false;
+            linearOverlay?.Hide();
+          }
         }
       }
       if (wParam == (IntPtr) WM_MOUSEMOVE && active) {
@@ -261,28 +282,54 @@ static class Program {
       Keys key = (Keys) vkCode;
       if (UseArcEditKeyboardBind && key == (Keys) ArcEditKey) {
         if (wParam == (IntPtr) WM_KEYDOWN) {
-          if (!arcEditing && !arcExecuting) {
-            arcEditing = true;
-            bulgeDegrees = 0;
-            GetCursorPos(out arcP1);
-            arcP2 = arcP1;
-            if (arcOverlay == null) arcOverlay = new ArcOverlay();
-            arcOverlay.Show();
-          } else if (arcExecuting) {
-            arcExecuting = false;
-            arcOverlay.Hide();
+          if (ToggleMode) {
+            if (!arcEditKeyDown) {
+              if (arcExecuting) {
+                arcExecuting = false;
+                arcOverlay.Hide();
+              } else if (arcEditing) {
+                arcEditing = false;
+                GetCursorPos(out arcP2);
+                ComputeArc();
+                arcOverlay.UpdateArc(arcP1, arcP2, arcCenter, arcRadius, startAngle, sweepAngle);
+                arcExecuting = true;
+              } else {
+                arcEditing = true;
+                bulgeDegrees = 0;
+                GetCursorPos(out arcP1);
+                arcP2 = arcP1;
+                if (arcOverlay == null) arcOverlay = new ArcOverlay();
+                arcOverlay.Show();
+              }
+            }
+            arcEditKeyDown = true;
+          } else {
+            if (!arcEditing && !arcExecuting) {
+              arcEditing = true;
+              bulgeDegrees = 0;
+              GetCursorPos(out arcP1);
+              arcP2 = arcP1;
+              if (arcOverlay == null) arcOverlay = new ArcOverlay();
+              arcOverlay.Show();
+            } else if (arcExecuting) {
+              arcExecuting = false;
+              arcOverlay.Hide();
+            }
           }
           return (IntPtr) 1;
-        }
-        if (wParam == (IntPtr) WM_KEYUP && arcEditing) {
-          arcEditing = false;
-          GetCursorPos(out arcP2);
-          ComputeArc();
-          arcOverlay.UpdateArc(arcP1, arcP2, arcCenter, arcRadius, startAngle, sweepAngle);
-          arcExecuting = true;
-          return (IntPtr) 1;
+        } else if (wParam == (IntPtr) WM_KEYUP) {
+          arcEditKeyDown = false;
+          if (!ToggleMode && arcEditing) {
+            arcEditing = false;
+            GetCursorPos(out arcP2);
+            ComputeArc();
+            arcOverlay.UpdateArc(arcP1, arcP2, arcCenter, arcRadius, startAngle, sweepAngle);
+            arcExecuting = true;
+            return (IntPtr) 1;
+          }
         }
       }
+
       if (arcEditing && (key == (Keys) ArcScrollUp || key == (Keys) ArcScrollDown)) {
         if (wParam == (IntPtr) WM_KEYDOWN) {
           bulgeDegrees += key == (Keys) ArcScrollUp ? 1 : -1;
@@ -291,17 +338,34 @@ static class Program {
         }
         return (IntPtr) 1;
       }
+
       if (key == KeyboardBindKey) {
         if (wParam == (IntPtr) WM_KEYDOWN || wParam == (IntPtr) WM_SYSKEYDOWN) {
-          active = true;
-          computed = false;
-          GetCursorPos(out initial);
+          if (ToggleMode) {
+            if (!linearKeyDown) {
+              active = !active;
+              if (active) {
+                GetCursorPos(out initial);
+                computed = false;
+                axisLocked = false;
+              } else {
+                axisLocked = false;
+                linearOverlay?.Hide();
+              }
+            }
+            linearKeyDown = true;
+          } else {
+            active = true;
+            computed = false;
+            GetCursorPos(out initial);
+          }
         } else if (wParam == (IntPtr) WM_KEYUP || wParam == (IntPtr) WM_SYSKEYUP) {
-          active = false;
-          computed = false;
-          axisLocked = false;
-          if (linearOverlay != null)
-            linearOverlay.Hide();
+          linearKeyDown = false;
+          if (!ToggleMode) {
+            active = false;
+            axisLocked = false;
+            linearOverlay?.Hide();
+          }
         }
       }
     }
@@ -644,6 +708,7 @@ public partial class SettingsForm: Form {
     Program.THRESHOLD = (double) numericUpDownThreshold.Value;
     Program.THRESHOLD_FACTOR = (double) numericUpDownThresholdFactor.Value;
     Program.LockInitialAxis = checkBoxLockAxis.Checked;
+    Program.ToggleMode = checkBoxToggleMode.Checked;
     DialogResult = DialogResult.OK;
     Close();
   }
@@ -674,6 +739,7 @@ public partial class SettingsForm: Form {
   private Button btnOK;
   private Button btnCancel;
   private CheckBox checkBoxLockAxis;
+  private CheckBox checkBoxToggleMode;
   private void InitializeComponent() {
     this.checkBoxLockAxis = new CheckBox();
     this.groupBoxLinear = new GroupBox();
@@ -703,7 +769,7 @@ public partial class SettingsForm: Form {
     ((System.ComponentModel.ISupportInitialize)(this.numericUpDownThresholdFactor)).BeginInit();
     this.SuspendLayout();
     this.groupBoxLinear.Text = "Linear Mode";
-    this.groupBoxLinear.Location = new Point(15, 90);
+    this.groupBoxLinear.Location = new Point(15, 110);
     this.groupBoxLinear.Size = new Size(250, 80);
     this.btnSetLinearBind.Location = new Point(10, 20);
     this.btnSetLinearBind.Size = new Size(110, 23);
@@ -719,7 +785,7 @@ public partial class SettingsForm: Form {
     this.groupBoxLinear.Controls.Add(this.lblLinearCurrent);
     this.groupBoxLinear.Controls.Add(this.lblLinearBind);
     this.groupBoxArc.Text = "Arc Mode";
-    this.groupBoxArc.Location = new Point(15, 160);
+    this.groupBoxArc.Location = new Point(15, 190);
     this.groupBoxArc.Size = new Size(250, 80);
     this.btnSetArcBind.Location = new Point(10, 20);
     this.btnSetArcBind.Size = new Size(110, 23);
@@ -735,7 +801,7 @@ public partial class SettingsForm: Form {
     this.groupBoxArc.Controls.Add(this.lblArcCurrent);
     this.groupBoxArc.Controls.Add(this.lblArcBind);
     this.groupBoxArcScrollUp.Text = "Arc Angle +";
-    this.groupBoxArcScrollUp.Location = new Point(15, 240);
+    this.groupBoxArcScrollUp.Location = new Point(15, 270);
     this.groupBoxArcScrollUp.Size = new Size(250, 80);
     this.btnSetArcScrollUpBind.Location = new Point(10, 20);
     this.btnSetArcScrollUpBind.Size = new Size(110, 23);
@@ -751,7 +817,7 @@ public partial class SettingsForm: Form {
     this.groupBoxArcScrollUp.Controls.Add(this.lblArcScrollUpCurrent);
     this.groupBoxArcScrollUp.Controls.Add(this.lblArcScrollUpBind);
     this.groupBoxArcScrollDown.Text = "Arc Angle -";
-    this.groupBoxArcScrollDown.Location = new Point(15, 320);
+    this.groupBoxArcScrollDown.Location = new Point(15, 350);
     this.groupBoxArcScrollDown.Size = new Size(250, 80);
     this.btnSetArcScrollDownBind.Location = new Point(10, 20);
     this.btnSetArcScrollDownBind.Size = new Size(110, 23);
@@ -784,20 +850,25 @@ public partial class SettingsForm: Form {
     this.numericUpDownThresholdFactor.Minimum = 0.01M;
     this.checkBoxLockAxis.Location = new Point(15, 60);
     this.checkBoxLockAxis.Size = new Size(200, 20);
-    this.checkBoxLockAxis.Text = "Lock to initial axis (linear mode)";
+    this.checkBoxLockAxis.Text = "Lock to initial axis";
     this.checkBoxLockAxis.Checked = Program.LockInitialAxis;
-    this.lblGlobalStatus.Location = new Point(15, 400);
+    this.checkBoxToggleMode = new CheckBox();
+    this.checkBoxToggleMode.Location = new Point(15, 85);
+    this.checkBoxToggleMode.Size = new Size(200, 20);
+    this.checkBoxToggleMode.Text = "Toggle Mode";
+    this.checkBoxToggleMode.Checked = Program.ToggleMode;
+    this.lblGlobalStatus.Location = new Point(15, 430);
     this.lblGlobalStatus.Size = new Size(250, 20);
     this.lblGlobalStatus.Text = "Ready.";
-    this.btnOK.Location = new Point(15, 420);
+    this.btnOK.Location = new Point(15, 450);
     this.btnOK.Size = new Size(75, 23);
     this.btnOK.Text = "Save";
     this.btnOK.Click += new EventHandler(this.btnOK_Click);
-    this.btnCancel.Location = new Point(100, 420);
+    this.btnCancel.Location = new Point(100, 450);
     this.btnCancel.Size = new Size(75, 23);
     this.btnCancel.Text = "Cancel";
     this.btnCancel.Click += new EventHandler(this.btnCancel_Click);
-    this.ClientSize = new Size(280, 455);
+    this.ClientSize = new Size(280, 485);
     this.Controls.Add(this.groupBoxLinear);
     this.Controls.Add(this.groupBoxArc);
     this.Controls.Add(this.groupBoxArcScrollUp);
@@ -807,6 +878,7 @@ public partial class SettingsForm: Form {
     this.Controls.Add(this.lblThresholdFactor);
     this.Controls.Add(this.numericUpDownThresholdFactor);
     this.Controls.Add(this.checkBoxLockAxis);
+    this.Controls.Add(this.checkBoxToggleMode);
     this.Controls.Add(this.lblGlobalStatus);
     this.Controls.Add(this.btnOK);
     this.Controls.Add(this.btnCancel);
