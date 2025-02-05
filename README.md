@@ -13,10 +13,15 @@ StickyMouse is a C# application that constrains your mouse movement to linear ax
 
 ## Demos
 https://github.com/user-attachments/assets/0cc389d1-df39-4d5f-b2ca-2dea091fc808
+
 https://github.com/user-attachments/assets/325274b0-344f-49da-b661-9b961830520d
+
 https://github.com/user-attachments/assets/715e58bf-d3c1-47a5-bdb6-8bc984faac1e
+
 https://github.com/user-attachments/assets/c4294eee-07d2-48c8-801c-d773a253d1c5
+
 https://github.com/user-attachments/assets/424daf24-fad7-4d06-9e7d-d94ecf851964
+
 https://github.com/user-attachments/assets/dd9a65dd-5a03-44aa-af9d-dea484edda0b
 
 ## Installation
