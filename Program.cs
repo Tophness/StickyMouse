@@ -33,6 +33,7 @@ static class Program {
   public static int MouseBindUp = WM_MBUTTONUP;
   public static Keys KeyboardBindKey = Keys.None;
   public static bool UseKeyboardBind = false;
+  public static bool LockInitialAxis = true;
 
   public static int ArcEditKey = (int) Keys.Tab;
   public static int ArcScrollUp = 0x20A;
@@ -41,13 +42,14 @@ static class Program {
   public static bool UseArcScrollUpKeyboardBind = true;
   public static bool UseArcScrollDownKeyboardBind = true;
 
+  static bool axisLocked;
+  static double lockedDirX, lockedDirY;
   static IntPtr mouseHookID = IntPtr.Zero;
   static IntPtr keyboardHookID = IntPtr.Zero;
   static LowLevelMouseProc mouseProc = MouseHookCallback;
   static LowLevelKeyboardProc keyboardProc = KeyboardHookCallback;
   static bool active, computed;
   static POINT initial;
-  static double dirX, dirY;
   static bool arcEditing, arcExecuting;
   public static POINT arcP1, arcP2, arcP3;
   static double bulgeDegrees;
@@ -83,6 +85,7 @@ static class Program {
     THRESHOLD = double.Parse(ReadIni("Settings", "Threshold", "3.0"));
     THRESHOLD_FACTOR = double.Parse(ReadIni("Settings", "ThresholdFactor", "0.2"));
     UseKeyboardBind = bool.Parse(ReadIni("Settings", "UseKeyboardBind", "False"));
+    LockInitialAxis = bool.Parse(ReadIni("Settings", "LockInitialAxis", "True"));
     MouseBindDown = Convert.ToInt32(ReadIni("Settings", "MouseBindDown", WM_MBUTTONDOWN.ToString("X")), 16);
     MouseBindUp = Convert.ToInt32(ReadIni("Settings", "MouseBindUp", WM_MBUTTONUP.ToString("X")), 16);
     KeyboardBindKey = (Keys) int.Parse(ReadIni("Settings", "KeyboardBindKey", "0"));
@@ -97,6 +100,7 @@ static class Program {
   static void SaveSettings() {
     WriteIni("Settings", "Threshold", THRESHOLD.ToString());
     WriteIni("Settings", "ThresholdFactor", THRESHOLD_FACTOR.ToString());
+    WriteIni("Settings", "LockInitialAxis", LockInitialAxis.ToString());
     WriteIni("Settings", "UseKeyboardBind", UseKeyboardBind.ToString());
     WriteIni("Settings", "MouseBindDown", MouseBindDown.ToString("X"));
     WriteIni("Settings", "MouseBindUp", MouseBindUp.ToString("X"));
@@ -238,6 +242,7 @@ static class Program {
         } else if (wParam == (IntPtr) MouseBindUp) {
           active = false;
           computed = false;
+          axisLocked = false;
           if (linearOverlay != null)
             linearOverlay.Hide();
         }
@@ -294,6 +299,7 @@ static class Program {
         } else if (wParam == (IntPtr) WM_KEYUP || wParam == (IntPtr) WM_SYSKEYUP) {
           active = false;
           computed = false;
+          axisLocked = false;
           if (linearOverlay != null)
             linearOverlay.Hide();
         }
@@ -305,37 +311,36 @@ static class Program {
   static void HandleMouseMove(POINT current) {
     int dx = current.x - initial.x, dy = current.y - initial.y;
     double dist = Math.Sqrt(dx * dx + dy * dy);
-    if (!computed) {
+    if (!axisLocked) {
       if (dist >= THRESHOLD) {
         double angle = Math.Atan2(dy, dx);
         double quant = Math.Round(angle / (Math.PI / 4)) * (Math.PI / 4);
-        dirX = Math.Cos(quant);
-        dirY = Math.Sin(quant);
-        computed = true;
-
-        // Show the linear overlay
+        lockedDirX = Math.Cos(quant);
+        lockedDirY = Math.Sin(quant);
+        axisLocked = true;
         if (linearOverlay == null)
           linearOverlay = new LinearOverlay();
-        linearOverlay.UpdateLine(new PointF(initial.x, initial.y), new PointF((float) dirX, (float) dirY));
+        linearOverlay.UpdateLine(new PointF(initial.x, initial.y),
+          new PointF((float) lockedDirX, (float) lockedDirY));
         linearOverlay.Show();
       }
-    } else {
-      double proj = dx * dirX + dy * dirY;
-      double perpDist = Math.Abs(dx * dirY - dy * dirX);
-      double dynamicThreshold = THRESHOLD_FACTOR * Math.Abs(proj);
-      if (perpDist > dynamicThreshold) {
-        computed = false;
-        if (linearOverlay != null)
-          linearOverlay.Hide();
-      } else {
-        int nx = initial.x + (int) Math.Round(proj * dirX);
-        int ny = initial.y + (int) Math.Round(proj * dirY);
-        SetCursorPos(nx, ny);
-
-        // Update the linear overlay
-        if (linearOverlay != null)
-          linearOverlay.UpdateLine(new PointF(initial.x, initial.y), new PointF((float) dirX, (float) dirY));
+    }
+    if (axisLocked) {
+      double proj = dx * lockedDirX + dy * lockedDirY;
+      if (!LockInitialAxis) {
+        double perpDist = Math.Abs(dx * lockedDirY - dy * lockedDirX);
+        double dynamicThreshold = THRESHOLD_FACTOR * Math.Abs(proj);
+        if (perpDist > dynamicThreshold) {
+          axisLocked = false;
+          linearOverlay?.Hide();
+          return;
+        }
       }
+      int nx = initial.x + (int) Math.Round(proj * lockedDirX);
+      int ny = initial.y + (int) Math.Round(proj * lockedDirY);
+      SetCursorPos(nx, ny);
+      linearOverlay?.UpdateLine(new PointF(initial.x, initial.y),
+        new PointF((float) lockedDirX, (float) lockedDirY));
     }
   }
 
@@ -417,80 +422,71 @@ class ArcOverlay: Form {
   }
 }
 
-class LinearOverlay : Form
-{
-    private PointF startPoint;
-    private PointF direction;
+class LinearOverlay: Form {
+  private PointF startPoint;
+  private PointF direction;
 
-    public LinearOverlay()
-    {
-        FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = false;
-        TopMost = true;
-        BackColor = Color.Black;
-        TransparencyKey = Color.Black;
-        Opacity = 0.25;
-        WindowState = FormWindowState.Maximized;
+  public LinearOverlay() {
+    FormBorderStyle = FormBorderStyle.None;
+    ShowInTaskbar = false;
+    TopMost = true;
+    BackColor = Color.Black;
+    TransparencyKey = Color.Black;
+    Opacity = 0.25;
+    WindowState = FormWindowState.Maximized;
+  }
+
+  protected override CreateParams CreateParams {
+    get {
+      CreateParams cp = base.CreateParams;
+      cp.ExStyle |= 0x80000 | 0x20;
+      return cp;
+    }
+  }
+
+  public void UpdateLine(PointF start, PointF dir) {
+    startPoint = start;
+    direction = dir;
+    Invalidate();
+  }
+
+  protected override void OnPaint(PaintEventArgs e) {
+    if (direction == PointF.Empty || (direction.X == 0 && direction.Y == 0)) return;
+
+    using(var pen = new Pen(Color.Blue, 5)) {
+      Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
+      PointF endPoint1 = CalculateEdgeIntersection(startPoint, direction, screenBounds);
+      PointF endPoint2 = CalculateEdgeIntersection(startPoint, new PointF(-direction.X, -direction.Y), screenBounds);
+
+      endPoint1 = ClampPointToScreen(endPoint1, screenBounds);
+      endPoint2 = ClampPointToScreen(endPoint2, screenBounds);
+
+      e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+      e.Graphics.DrawLine(pen, endPoint1, endPoint2);
     }
 
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            CreateParams cp = base.CreateParams;
-            cp.ExStyle |= 0x80000 | 0x20;
-            return cp;
-        }
-    }
+    base.OnPaint(e);
+  }
 
-    public void UpdateLine(PointF start, PointF dir)
-    {
-        startPoint = start;
-        direction = dir;
-        Invalidate();
-    }
+  private PointF CalculateEdgeIntersection(PointF start, PointF dir, Rectangle bounds) {
+    if (dir.X == 0 && dir.Y == 0)
+      return start;
 
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        if (direction == PointF.Empty || (direction.X == 0 && direction.Y == 0)) return;
+    float tX = (dir.X != 0) ? ((dir.X > 0) ? (bounds.Right - start.X) / dir.X : (bounds.Left - start.X) / dir.X) : float.MaxValue;
+    float tY = (dir.Y != 0) ? ((dir.Y > 0) ? (bounds.Bottom - start.Y) / dir.Y : (bounds.Top - start.Y) / dir.Y) : float.MaxValue;
+    float t = Math.Min(tX, tY);
 
-        using (var pen = new Pen(Color.Blue, 5))
-        {
-            Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
-            PointF endPoint1 = CalculateEdgeIntersection(startPoint, direction, screenBounds);
-            PointF endPoint2 = CalculateEdgeIntersection(startPoint, new PointF(-direction.X, -direction.Y), screenBounds);
+    if (float.IsInfinity(t) || float.IsNaN(t))
+      return start;
 
-            endPoint1 = ClampPointToScreen(endPoint1, screenBounds);
-            endPoint2 = ClampPointToScreen(endPoint2, screenBounds);
+    return new PointF(start.X + dir.X * t, start.Y + dir.Y * t);
+  }
 
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            e.Graphics.DrawLine(pen, endPoint1, endPoint2);
-        }
-
-        base.OnPaint(e);
-    }
-
-    private PointF CalculateEdgeIntersection(PointF start, PointF dir, Rectangle bounds)
-    {
-        if (dir.X == 0 && dir.Y == 0)
-            return start;
-
-        float tX = (dir.X != 0) ? ((dir.X > 0) ? (bounds.Right - start.X) / dir.X : (bounds.Left - start.X) / dir.X) : float.MaxValue;
-        float tY = (dir.Y != 0) ? ((dir.Y > 0) ? (bounds.Bottom - start.Y) / dir.Y : (bounds.Top - start.Y) / dir.Y) : float.MaxValue;
-        float t = Math.Min(tX, tY);
-
-        if (float.IsInfinity(t) || float.IsNaN(t))
-            return start;
-
-        return new PointF(start.X + dir.X * t, start.Y + dir.Y * t);
-    }
-
-    private PointF ClampPointToScreen(PointF point, Rectangle bounds)
-    {
-        point.X = Math.Clamp(point.X, bounds.Left, bounds.Right);
-        point.Y = Math.Clamp(point.Y, bounds.Top, bounds.Bottom);
-        return point;
-    }
+  private PointF ClampPointToScreen(PointF point, Rectangle bounds) {
+    point.X = Math.Clamp(point.X, bounds.Left, bounds.Right);
+    point.Y = Math.Clamp(point.Y, bounds.Top, bounds.Bottom);
+    return point;
+  }
 }
 
 public partial class SettingsForm: Form {
@@ -514,6 +510,7 @@ public partial class SettingsForm: Form {
     lblArcScrollUpBind.Text = Program.ArcScrollUp.ToString("X");
     lblArcScrollDownBind.Text = Program.ArcScrollDown.ToString("X");
     lblGlobalStatus.Text = "Ready.";
+    checkBoxLockAxis.Checked = Program.LockInitialAxis;
   }
   protected override bool ProcessCmdKey(ref Message msg, Keys keyData) {
     if (Capture && (currentBindType == BindType.Linear || currentBindType == BindType.Arc || currentBindType == BindType.ArcScrollUp || currentBindType == BindType.ArcScrollDown)) {
@@ -646,6 +643,7 @@ public partial class SettingsForm: Form {
   private void btnOK_Click(object sender, EventArgs e) {
     Program.THRESHOLD = (double) numericUpDownThreshold.Value;
     Program.THRESHOLD_FACTOR = (double) numericUpDownThresholdFactor.Value;
+    Program.LockInitialAxis = checkBoxLockAxis.Checked;
     DialogResult = DialogResult.OK;
     Close();
   }
@@ -675,7 +673,9 @@ public partial class SettingsForm: Form {
   private NumericUpDown numericUpDownThresholdFactor;
   private Button btnOK;
   private Button btnCancel;
+  private CheckBox checkBoxLockAxis;
   private void InitializeComponent() {
+    this.checkBoxLockAxis = new CheckBox();
     this.groupBoxLinear = new GroupBox();
     this.btnSetLinearBind = new Button();
     this.lblLinearCurrent = new Label();
@@ -703,7 +703,7 @@ public partial class SettingsForm: Form {
     ((System.ComponentModel.ISupportInitialize)(this.numericUpDownThresholdFactor)).BeginInit();
     this.SuspendLayout();
     this.groupBoxLinear.Text = "Linear Mode";
-    this.groupBoxLinear.Location = new Point(15, 70);
+    this.groupBoxLinear.Location = new Point(15, 90);
     this.groupBoxLinear.Size = new Size(250, 80);
     this.btnSetLinearBind.Location = new Point(10, 20);
     this.btnSetLinearBind.Size = new Size(110, 23);
@@ -782,6 +782,10 @@ public partial class SettingsForm: Form {
     this.numericUpDownThresholdFactor.Location = new Point(160, 33);
     this.numericUpDownThresholdFactor.Size = new Size(80, 20);
     this.numericUpDownThresholdFactor.Minimum = 0.01M;
+    this.checkBoxLockAxis.Location = new Point(15, 60);
+    this.checkBoxLockAxis.Size = new Size(200, 20);
+    this.checkBoxLockAxis.Text = "Lock to initial axis (linear mode)";
+    this.checkBoxLockAxis.Checked = Program.LockInitialAxis;
     this.lblGlobalStatus.Location = new Point(15, 400);
     this.lblGlobalStatus.Size = new Size(250, 20);
     this.lblGlobalStatus.Text = "Ready.";
@@ -802,6 +806,7 @@ public partial class SettingsForm: Form {
     this.Controls.Add(this.numericUpDownThreshold);
     this.Controls.Add(this.lblThresholdFactor);
     this.Controls.Add(this.numericUpDownThresholdFactor);
+    this.Controls.Add(this.checkBoxLockAxis);
     this.Controls.Add(this.lblGlobalStatus);
     this.Controls.Add(this.btnOK);
     this.Controls.Add(this.btnCancel);
